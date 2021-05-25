@@ -4,7 +4,7 @@
 	author©: Alois Pichler
 """
 
-using Gnuplot; Gnuplot.options.gpviewer= true;	# external viewer
+using Gnuplot; Gnuplot.options.gpviewer= true	# external viewer
 using Distributions, StatsBase
 
 struct timeSeries
@@ -12,44 +12,42 @@ struct timeSeries
 	meta::Any			# meta information
 end
 
+#	│	ARMA time series
+#	╰────────────────────────────────────────────────────
+function ARMA(T::Int64; φ= [0.8, 0.1, -0.1], θ= [1.7, 1.4, .2, 1.], Z::UnivariateDistribution= Normal(0,1))::timeSeries
+	p= length(φ); X= rand(Z, T)		# AR: initialize the time series
+	q= length(θ); Z= rand(Z, T)		# MA: random noise
+	for t= max(p,q)+1: T			# apply the linear time series
+		X[t]= reverse(φ)' * X[t-p:t-1] + reverse([1; θ])' * Z[t-q:t]
+	end
+	return timeSeries(X, "ARMA(Φ=$φ, θ=$θ)")
+end
+
 #	│	this time series has constant autocovariance function
-#	╰────────────────────────────────────────────────────────
+#	╰────────────────────────────────────────────────────────────
 function constantACF(T::Int64; ρ= 0.9, Z::UnivariateDistribution= Normal(0,1))::timeSeries
 	Z= rand(Z, T)			# random noise
 	X̅= 0.0; X= Vector{Float64}(undef, T)
 	for t= 1:T
 		ρt= (t-1)*ρ/(1+ (t-2)*ρ)
 		X[t]= ρt* X̅+ sqrt(1- ρt* ρ)* Z[t]
-		X̅= X̅*(t-1)/t + X[t]/ t	# update the mean
+		X̅= X̅*(t-1)/t + X[t]/ t	# update the running mean
 	end
 	return timeSeries(X, "constant acf: ρ= $ρ")
 end
 
-#	│	ARMA time series
+#	│	Yule–Walker: the autocorrlation ρ is given
 #	╰────────────────────────────────────────────────────
-function ARMA(T::Int64; φ= [0.8, 0.1, -0.1], θ= [1.7, 1.4, .2, 1.], Z::UnivariateDistribution= Normal(0,1))
-	p= length(φ); X= rand(Z, T)		# AR: to start the time series
-	q= length(θ); Z= rand(Z, T)		# MA: random noise
-	for t= max(p,q)+1: T
-		X[t]= reverse(φ)' * X[t-p:t-1] + reverse([1; θ])' * Z[t-q:t]
-	end
-	return timeSeries(X, "ARMA(Φ=$φ, θ=$θ)")
-end
-
-#	│	Yule–Walker: the autocovariance ρ is given
-#	╰────────────────────────────────────────────────────
-function YuleWalker(T::Int64; ρ= [0.1, -0.1], Z::UnivariateDistribution= Normal(0,1))
+function YuleWalker(T::Int64; ρ= [0.1, -0.1], Z::UnivariateDistribution= Normal(0,1))::timeSeries
 	σ²= var(Z); γ= σ² * [1; ρ]			# auto covariance
-	Γ= σ²* Matrix{Float64}(undef, length(γ)-1, length(γ)-1)
-	for i= 1:length(γ)-1		# Töplitz matrix
-		for j= 1:length(γ)-1
-			Γ[i,j]= γ[abs(i-j)+1]
-	end	end
+	Γ= Matrix{Float64}(undef, length(γ)-1, length(γ)-1)
+	for i= 1:length(γ)-1, j= 1:length(γ)-1
+		Γ[i,j]= γ[abs(i-j)+1]	# Töplitz matrix
+	end
 	φ= Γ\ γ[2:end]				# solve Yule–Walker equations
-	ψ²= σ² - φ'* γ[2:end]
-	ψ² ≥ 0 || @error "ψ² is negative."
+	ψ²= σ² - φ'* γ[2:end]; ψ² ≥ 0 || @error "ψ² is negative."
 	X= rand(Z, T); Z= X		# make some noise
-	for t= length(γ): T
+	for t= length(γ): T		# apply the linear time series
 		X[t]= reverse(φ)' * X[t-length(γ)+1:t-1] + sqrt(ψ²)* Z[t]
 	end
 	return timeSeries(X, "Yule–Walker: Φ=$(round.(φ, sigdigits=3)), γ=$γ")
@@ -64,7 +62,7 @@ distZ= Normal(0.0, 1.)		# Normal(0.0, 1.), Uniform(-1, 1), Cauchy(0, 1), Exponen
 @gp :- "set multiplot layout 2,1" :-
 @gp :- 1 "set border 0; set xlabel 'time t'; set zeroaxis linetype 1 linecolor 'black'; set xtics axis add ('' 0)" :-
 for i= 1:copies
-	ts= constantACF(T; ρ= 0.99, Z= distZ)	# ARMA(T; Z= distZ), YuleWalker(T; ρ= [0.9, 0.8]), constantACF(T; ρ= 0.9, Z= distZ)
+	ts= YuleWalker(T; ρ= [0.9, 0.8])	# ARMA(T; Z= distZ), YuleWalker(T; ρ= [0.9, 0.8]), constantACF(T; ρ= 0.99, Z= distZ)
 	@gp :- 1 ts.Xt "with lines title 'realization $i'" :-
 	@gp :- 2 autocov(ts.Xt) "with boxes title ''" :-
 end
