@@ -1,7 +1,7 @@
 """
 	Temperature in Germany
 	created: 2021, April
-    author©: Alois Pichler
+	author©: Alois Pichler
 """
 
 using Gnuplot; Gnuplot.options.gpviewer= true;	# external viewer
@@ -15,6 +15,7 @@ println("────────────────── Temperature")
 println("──────── https://de.wikipedia.org/wiki/Zeitreihe_der_Lufttemperatur_in_Deutschland ──────────")
 
 df= CSV.read("HistoricTemperatureGermany.csv", DataFrame; delim=';', decimal=',', dateformat="m/d/yyyy")
+sort!(df, [:date])							# dates ascending
 insertcols!(df, 2, :time=> (1970).+Dates.datetime2unix.(DateTime.(df.date))./ 60/60/24/365.2422)
 
 A= Array{Float64,2}(undef, size(df,1), 5)	# regression matrix
@@ -29,9 +30,9 @@ for i= length(ma):-1:maℓag
 end
 
 @gp "reset; set multiplot layout 2,1; set border 0" :-
-@gp :- 1 "set title 'historic temperatures, Germany'" 
-@gp :- "set xdata time" "set timefmt '\"%Y-%m-%d\"'" :-
-@gp :- "set format x '%m-%Y'" "set xtics rotate by -30" :-
+@gp :- 1 "set title 'historic temperatures, Germany'" :-
+@gp :- "set xdata time; set timefmt '\"%Y-%m-%d\"'" :-
+@gp :- "set format x '%m-%Y'; set xtics rotate by -30" :-
 @gp :- """set xrange ['"1749-01-01"':'"2025-01-01"']""" :-
 @gp :- "set style line 1 lc rgb 'blue' lt 1 lw 8 pt 7 ps 2.0"
 @gp :- string.(df.date) df.regression  "using 1:2 ls -1 lt rgb'red' title 'regression' with linespoints" :-
